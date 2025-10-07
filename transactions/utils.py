@@ -38,3 +38,81 @@ def to_display_currency(amount, currency, currency_rate=1):
     if currency.upper() == 'USD':
         return amount * currency_rate
     return amount
+
+
+def get_user_balance(user):
+    """
+    Get user's available balance from completed transactions.
+    """
+    from .models import Transaction
+    
+    # Get all completed transactions for the user
+    transactions = Transaction.objects.filter(
+        user=user, 
+        status='completed'
+    )
+    
+    balance = 0
+    for transaction in transactions:
+        if transaction.transaction_type in ['deposit', 'credit', 'refund']:
+            balance += transaction.amount
+        elif transaction.transaction_type in ['withdrawal', 'debit', 'purchase']:
+            balance -= transaction.amount
+    
+    return balance
+
+
+def can_afford_purchase(user, amount):
+    """
+    Check if user can afford a purchase.
+    """
+    return get_user_balance(user) >= amount
+
+
+def create_purchase_transaction(user, amount, description, reference=None):
+    """
+    Create a purchase transaction that deducts from user balance.
+    """
+    from .models import Transaction
+    
+    transaction = Transaction.objects.create(
+        user=user,
+        amount=amount,
+        transaction_type='purchase',
+        description=description,
+        reference=reference,
+        status='completed'  # Immediately complete since it's from balance
+    )
+    return transaction
+
+
+def create_sale_transaction(user, amount, description, reference=None, admin_fee=0):
+    """
+    Create a sale transaction that adds to seller balance (minus admin fee).
+    """
+    from .models import Transaction
+    
+    net_amount = amount - admin_fee
+    
+    # Create credit transaction for seller
+    transaction = Transaction.objects.create(
+        user=user,
+        amount=net_amount,
+        transaction_type='credit',
+        description=description,
+        reference=reference,
+        status='completed'
+    )
+    
+    # Create admin fee transaction if there's a fee
+    if admin_fee > 0:
+        Transaction.objects.create(
+            user=user,
+            amount=admin_fee,
+            transaction_type='fee',
+            description=f"Admin fee for: {description}",
+            reference=reference,
+            status='completed'
+        )
+    
+    return transaction

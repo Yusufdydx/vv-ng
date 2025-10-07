@@ -53,7 +53,7 @@
                     </div>
                 </div>
                 <p class="text-yellow-700 text-xs mt-2">
-                    * {{ site_settings.withdraw_fee_pct|default:"2.0" }}% withdrawal fee applies
+                    * {{ affiliate_settings.withdrawal_fee_rate|default:"1.0" }}% + ₦{{ affiliate_settings.withdrawal_fixed_fee|default:"50.00" }} withdrawal fee applies
                 </p>
             </div>
 
@@ -89,7 +89,8 @@
 </div>
 
 <script>
-const feePercentage = {{ site_settings.withdraw_fee_pct|default:"2.0" }} / 100;
+const feePercentage = {{ affiliate_settings.withdrawal_fee_rate|default:"1.0" }} / 100;
+const fixedFee = {{ affiliate_settings.withdrawal_fixed_fee|default:"50.00" }};
 const amountInput = document.getElementById('amount');
 const withdrawalFeeSpan = document.getElementById('withdrawalFee');
 const netAmountSpan = document.getElementById('netAmount');
@@ -98,11 +99,41 @@ const bankAccountSection = document.getElementById('bankAccountSection');
 
 function calculateFees() {
     const amount = parseFloat(amountInput.value) || 0;
-    const withdrawalFee = amount * feePercentage;
-    const netAmount = amount - withdrawalFee;
+    const withdrawalFee = (amount * feePercentage) + fixedFee;
+    const totalDebit = amount + withdrawalFee;
+    const netAmount = amount; // User receives the amount they requested
 
     withdrawalFeeSpan.textContent = '₦' + withdrawalFee.toFixed(2);
     netAmountSpan.textContent = '₦' + netAmount.toFixed(2);
+    
+    // Update the fee information section
+    const feeInfoSection = document.querySelector('.bg-yellow-50');
+    if (feeInfoSection) {
+        feeInfoSection.innerHTML = `
+            <h3 class="font-semibold text-yellow-800 mb-2">Withdrawal Information</h3>
+            <div class="space-y-1 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-yellow-700">Withdrawal amount:</span>
+                    <span class="font-medium">₦${amount.toFixed(2)}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-yellow-700">Withdrawal fee:</span>
+                    <span class="font-medium">₦${withdrawalFee.toFixed(2)}</span>
+                </div>
+                <div class="flex justify-between border-t border-yellow-200 pt-1">
+                    <span class="text-yellow-800 font-semibold">Total debit:</span>
+                    <span class="font-bold text-yellow-800">₦${totalDebit.toFixed(2)}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-yellow-700">Amount you'll receive:</span>
+                    <span class="font-medium text-green-600">₦${netAmount.toFixed(2)}</span>
+                </div>
+            </div>
+            <p class="text-yellow-700 text-xs mt-2">
+                * ${feePercentage * 100}% + ₦${fixedFee} withdrawal fee applies
+            </p>
+        `;
+    }
 }
 
 function toggleBankAccountSection() {

@@ -19,6 +19,17 @@ def dashboard(request):
     balance_data = Transaction.get_user_balance(user)
     print(f"🧾 DEBUG: Dashboard showing balance {balance_data} for {user.username}")
     
+    # Check KYC status
+    try:
+        kyc = user.kyc
+        kyc_approved = kyc.is_approved()
+    except:
+        kyc = None
+        kyc_approved = False
+    
+    # Check profile completion
+    profile_complete = user.profile.is_complete if hasattr(user, 'profile') else False
+    
     # This week's earnings
     weekly_earnings = Transaction.objects.filter(
         user=user,
@@ -104,6 +115,9 @@ def dashboard(request):
         'top_earners_week': top_earners_week,
         'top_referrers_week': top_referrers_week,
         'recent_transactions': recent_transactions,
+        'profile_complete': profile_complete,
+        'kyc_approved': kyc_approved,
+        'kyc': kyc,
     }
     
     return render(request, 'dashboard/dashboard.html', context)

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import JobCategory, Job
+from .models import JobCategory, Job, JobPurchase
 
 @admin.register(JobCategory)
 class JobCategoryAdmin(admin.ModelAdmin):
@@ -34,3 +34,26 @@ class JobAdmin(admin.ModelAdmin):
             job.save()
         self.message_user(request, f'{queryset.count()} jobs rejected.')
     reject_jobs.short_description = "Reject selected jobs"
+
+
+@admin.register(JobPurchase)
+class JobPurchaseAdmin(admin.ModelAdmin):
+    list_display = (
+        'job', 'buyer', 'seller', 'purchase_price', 'admin_fee', 
+        'net_amount', 'status', 'purchased_at'
+    )
+    list_filter = ('status', 'purchased_at')
+    search_fields = ('job__title', 'buyer__username', 'seller__username')
+    readonly_fields = ('purchased_at', 'net_amount')
+    list_editable = ('status',)
+    actions = ['mark_completed', 'mark_refunded']
+
+    def mark_completed(self, request, queryset):
+        updated = queryset.update(status='completed')
+        self.message_user(request, f'{updated} purchases marked as completed.')
+    mark_completed.short_description = "Mark selected purchases as completed"
+
+    def mark_refunded(self, request, queryset):
+        updated = queryset.update(status='refunded')
+        self.message_user(request, f'{updated} purchases marked as refunded.')
+    mark_refunded.short_description = "Mark selected purchases as refunded"

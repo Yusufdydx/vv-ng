@@ -7,7 +7,16 @@ class CustomUserCreationForm(UserCreationForm):
     
     class Meta:
         model = User
-        fields = ('username', 'email', 'first_name', 'last_name', 'referral_code')
+        fields = ('username', 'email', 'first_name', 'last_name')
+    
+    def clean_referral_code(self):
+        referral_code = self.cleaned_data.get('referral_code')
+        if referral_code:
+            try:
+                User.objects.get(referral_code=referral_code)
+            except User.DoesNotExist:
+                raise forms.ValidationError("Invalid referral code. Please check and try again.")
+        return referral_code
 
 class CustomUserChangeForm(UserChangeForm):
     class Meta:
@@ -73,5 +82,79 @@ class CryptoWalletForm(forms.ModelForm):
         
         if is_primary and user:
             CryptoWallet.objects.filter(user=user, is_primary=True).update(is_primary=False)
+        
+        return cleaned_data
+
+
+class PasswordResetRequestForm(forms.Form):
+    first_name = forms.CharField(
+        max_length=30,
+        widget=forms.TextInput(attrs={
+            'class': 'mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500',
+            'placeholder': 'Enter your first name'
+        })
+    )
+    last_name = forms.CharField(
+        max_length=30,
+        widget=forms.TextInput(attrs={
+            'class': 'mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500',
+            'placeholder': 'Enter your last name'
+        })
+    )
+    email = forms.EmailField(
+        widget=forms.EmailInput(attrs={
+            'class': 'mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500',
+            'placeholder': 'Enter your email address'
+        })
+    )
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        first_name = cleaned_data.get('first_name')
+        last_name = cleaned_data.get('last_name')
+        email = cleaned_data.get('email')
+        
+        if first_name and last_name and email:
+            try:
+                user = User.objects.get(
+                    first_name__iexact=first_name,
+                    last_name__iexact=last_name,
+                    email__iexact=email
+                )
+                cleaned_data['user'] = user
+            except User.DoesNotExist:
+                raise forms.ValidationError("No user found with the provided details. Please check your information.")
+            except User.MultipleObjectsReturned:
+                raise forms.ValidationError("Multiple users found with these details. Please contact support.")
+        
+        return cleaned_data
+
+
+class PasswordResetConfirmForm(forms.Form):
+    new_password1 = forms.CharField(
+        label="New Password",
+        widget=forms.PasswordInput(attrs={
+            'class': 'mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500',
+            'placeholder': 'Enter new password'
+        }),
+        min_length=8,
+        help_text="Password must be at least 8 characters long."
+    )
+    new_password2 = forms.CharField(
+        label="Confirm New Password",
+        widget=forms.PasswordInput(attrs={
+            'class': 'mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500',
+            'placeholder': 'Confirm new password'
+        })
+    )
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        password1 = cleaned_data.get('new_password1')
+        password2 = cleaned_data.get('new_password2')
+        
+        if password1 and password2:
+            if password1 != password2:
+                raise forms.ValidationError("The two password fields didn't match.")
         
         return cleaned_data

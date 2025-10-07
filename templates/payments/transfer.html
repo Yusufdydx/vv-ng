@@ -55,7 +55,7 @@
                         <span class="font-medium" id="transferAmount">₦0.00</span>
                     </div>
                     <div class="flex justify-between">
-                        <span class="text-green-700">Transfer fee ({{ site_settings.transfer_fee_pct|default:"0.5" }}%):</span>
+                        <span class="text-green-700">Transfer fee ({{ affiliate_settings.transfer_fee_rate|default:"0.5" }}%):</span>
                         <span class="font-medium" id="transferFee">₦0.00</span>
                     </div>
                     <div class="flex justify-between border-t border-green-200 pt-2">
@@ -88,7 +88,7 @@
 </div>
 
 <script>
-const feePercentage = {{ site_settings.transfer_fee_pct|default:"0.5" }} / 100;
+const feePercentage = {{ affiliate_settings.transfer_fee_rate|default:"0.5" }} / 100;
 const amountInput = document.getElementById('amount');
 const transferAmountSpan = document.getElementById('transferAmount');
 const transferFeeSpan = document.getElementById('transferFee');

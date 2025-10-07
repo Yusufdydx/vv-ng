@@ -18,6 +18,10 @@ urlpatterns = [
     path('bank-preferences/', views.bank_preferences, name='bank_preferences'),
     path('set-primary-account/<int:account_id>/', views.set_primary_account, name='set_primary_account'),
     path('toggle-account/<int:account_id>/', views.toggle_account_active, name='toggle_account_active'),
+    
+    # Password Reset URLs
+    path('password-reset/', views.password_reset_request, name='password_reset_request'),
+    path('password-reset/confirm/<uuid:token>/', views.password_reset_confirm, name='password_reset_confirm'),
 
     # This must stay LAST to avoid catching 'edit' as username
     path('profile/<str:username>/', views.PublicProfileView.as_view(), name='public_profile'),
