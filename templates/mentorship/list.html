@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block title %}Mentorship - Vinaji NG{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Mentorship Programs</h1>
+            <p class="text-gray-600">Connect with experienced mentors in your field</p>
+        </div>
+        {% if user.subscription_level == 'mentorship' %}
+        <a href="{% url 'mentorship_create' %}" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+            <i class="fas fa-plus mr-2"></i>Offer Mentorship
+        </a>
+        {% endif %}
+    </div>
+
+    <!-- Subscription Requirement Notice -->
+    {% if user.subscription_level != 'mentorship' %}
+    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+        <div class="flex items-center">
+            <i class="fas fa-crown text-yellow-600 text-xl mr-3"></i>
+            <div>
+                <h3 class="font-semibold text-yellow-800">Mentorship Subscription Required</h3>
+                <p class="text-yellow-700 text-sm mt-1">
+                    You need a Mentorship subscription to offer mentorship services or apply to mentorship programs.
+                    <a href="{% url 'pricing_list' %}" class="font-medium underline">Upgrade your subscription</a> to get started.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Mentorship Offers Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for offer in offers %}
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
+            <div class="p-6">
+                <!-- Mentor Info -->
+                <div class="flex items-center space-x-3 mb-4">
+                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                        <span class="font-semibold text-green-600">{{ offer.mentor.username|first|upper }}</span>
+                    </div>
+                    <div>
+                        <p class="font-medium text-gray-900">{{ offer.mentor.get_display_name }}</p>
+                        <p class="text-sm text-gray-500">@{{ offer.mentor.username }}</p>
+                    </div>
+                </div>
+
+                <!-- Offer Details -->
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ offer.title }}</h3>
+                <p class="text-gray-600 text-sm mb-4 line-clamp-2">{{ offer.description|truncatewords:20 }}</p>
+
+                <!-- Expertise & Pricing -->
+                <div class="space-y-2 mb-4">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-600">Expertise:</span>
+                        <span class="font-medium text-gray-900">{{ offer.expertise_area }}</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-600">Price per hour:</span>
+                        <span class="font-bold text-green-600">₦{{ offer.price_per_hour }}</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-600">Availability:</span>
+                        <span class="font-medium text-gray-900">{{ offer.current_students }}/{{ offer.max_students }}</span>
+                    </div>
+                </div>
+
+                <!-- Requirements -->
+                <div class="bg-gray-50 rounded-lg p-3 mb-4">
+                    <p class="text-xs text-gray-600">
+                        <i class="fas fa-crown mr-1"></i>
+                        Requires {{ offer.get_subscription_requirement_display }} subscription
+                    </p>
+                </div>
+
+                <!-- Apply Button -->
+                {% if user.is_authenticated and user.subscription_level == 'mentorship' %}
+                    {% if offer.can_accept_more_students %}
+                    <a href="{% url 'mentorship_apply' offer.pk %}" class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition-colors block text-center">
+                        Apply for Mentorship
+                    </a>
+                    {% else %}
+                    <button class="w-full bg-gray-400 text-white py-2 rounded-lg cursor-not-allowed" disabled>
+                        Program Full
+                    </button>
+                    {% endif %}
+                {% else %}
+                <button class="w-full bg-gray-400 text-white py-2 rounded-lg cursor-not-allowed" disabled>
+                    Subscription Required
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <div class="md:col-span-3 bg-white rounded-lg shadow-lg p-12 text-center">
+            <i class="fas fa-users text-gray-300 text-6xl mb-4"></i>
+            <h3 class="text-xl font-semibold text-gray-900 mb-2">No mentorship programs available</h3>
+            <p class="text-gray-600 mb-4">Be the first to offer mentorship in your expertise area.</p>
+            {% if user.subscription_level == 'mentorship' %}
+            <a href="{% url 'mentorship_create' %}" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                Create Mentorship Program
+            </a>
+            {% else %}
+            <a href="{% url 'pricing_list' %}" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                Upgrade to Mentorship
+            </a>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

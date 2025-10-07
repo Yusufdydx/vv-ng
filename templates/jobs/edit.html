@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Job - Vinaji NG{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h1 class="text-2xl font-bold text-gray-900 mb-6">Edit Job</h1>
+
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            
+            <!-- Form fields would be populated from the JobForm -->
+            <!-- Similar structure to create.html but with existing values -->
+            
+            <div class="flex justify-end space-x-3 pt-6">
+                <a href="{% url 'job_detail' object.pk %}" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 transition-colors">
+                    Cancel
+                </a>
+                <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors">
+                    Update Job
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
