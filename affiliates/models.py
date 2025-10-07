@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from solo.models import SingletonModel
 
 class Referral(models.Model):
     referrer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='referrals_made')
@@ -40,3 +41,76 @@ class AffiliateSale(models.Model):
         self.status = 'paid'
         self.paid_at = timezone.now()
         self.save()
+
+
+class AffiliateSettings(SingletonModel):
+    """Global affiliate program settings"""
+    
+    # Referral rewards
+    referral_signup_reward = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0.00,
+        help_text="Fixed amount rewarded for each successful referral signup"
+    )
+    referral_commission_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=5.00,
+        help_text="Percentage commission on referred user's transactions"
+    )
+    
+    # Platform fees
+    job_posting_fee_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=2.00,
+        help_text="Percentage fee on job postings"
+    )
+    course_sale_fee_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=3.00,
+        help_text="Percentage fee on course sales"
+    )
+    product_sale_fee_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=2.50,
+        help_text="Percentage fee on product sales"
+    )
+    mentorship_fee_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=5.00,
+        help_text="Percentage fee on mentorship enrollments"
+    )
+    
+    # Transaction fees
+    withdrawal_fee_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=1.00,
+        help_text="Percentage fee on withdrawals"
+    )
+    withdrawal_fixed_fee = models.DecimalField(
+        max_digits=10, decimal_places=2, default=50.00,
+        help_text="Fixed fee on withdrawals (in addition to percentage)"
+    )
+    transfer_fee_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0.50,
+        help_text="Percentage fee on transfers"
+    )
+    
+    # Minimum thresholds
+    min_withdrawal_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=1000.00,
+        help_text="Minimum amount for withdrawals"
+    )
+    min_commission_payout = models.DecimalField(
+        max_digits=10, decimal_places=2, default=500.00,
+        help_text="Minimum commission amount before payout"
+    )
+    
+    # Settings
+    auto_approve_commissions = models.BooleanField(
+        default=False,
+        help_text="Automatically approve affiliate commissions"
+    )
+    commission_payout_delay_days = models.PositiveIntegerField(
+        default=7,
+        help_text="Days to wait before commission payout"
+    )
+    
+    class Meta:
+        verbose_name = "Affiliate Settings"
+        verbose_name_plural = "Affiliate Settings"
+    
+    def __str__(self):
+        return "Affiliate Program Settings"

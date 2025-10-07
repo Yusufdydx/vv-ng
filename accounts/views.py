@@ -235,18 +235,41 @@ def register_view(request):
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
             try:
-                user = form.save()
-                username = form.cleaned_data.get("username")
-                raw_password = form.cleaned_data.get("password1")
+                with transaction.atomic():
+                    user = form.save()
+                    username = form.cleaned_data.get("username")
+                    raw_password = form.cleaned_data.get("password1")
+                    referral_code = form.cleaned_data.get("referral_code")
 
-                # Authenticate immediately after signup
-                user = authenticate(request, username=username, password=raw_password)
-                if user:
-                    login(request, user)
-                    messages.success(request, f"Welcome {user.username}, your account was created successfully!")
-                    return redirect("dashboard")
-                else:
-                    messages.error(request, "User created but automatic login failed. Please log in manually.")
+                    # Handle referral if provided
+                    if referral_code:
+                        try:
+                            referrer = User.objects.get(referral_code=referral_code)
+                            # Set the referred_by field in the user's profile
+                            user.profile.referred_by = referrer
+                            user.profile.save()
+                            
+                            # Create referral record in affiliates app
+                            from affiliates.models import Referral
+                            Referral.objects.create(
+                                referrer=referrer,
+                                referred_user=user
+                            )
+                            
+                            messages.success(request, f"✅ Account created successfully! You were referred by {referrer.get_display_name()}.")
+                        except User.DoesNotExist:
+                            # This shouldn't happen due to form validation, but just in case
+                            messages.warning(request, "Invalid referral code, but account was still created successfully.")
+
+                    # Authenticate immediately after signup
+                    user = authenticate(request, username=username, password=raw_password)
+                    if user:
+                        login(request, user)
+                        if not referral_code:
+                            messages.success(request, f"Welcome {user.username}, your account was created successfully!")
+                        return redirect("dashboard")
+                    else:
+                        messages.error(request, "User created but automatic login failed. Please log in manually.")
             except Exception as e:
                 import traceback
                 print("❌ Registration Save Error:", e)
@@ -455,3 +478,77 @@ class CryptoWalletCreateView(LoginRequiredMixin, CreateView):
         form.instance.user = self.request.user
         messages.success(self.request, 'Crypto wallet added successfully!')
         return super().form_valid(form)
+
+
+# Password Reset Views
+def password_reset_request(request):
+    """First step: User enters their details to request password reset"""
+    if request.method == 'POST':
+        from .forms import PasswordResetRequestForm
+        form = PasswordResetRequestForm(request.POST)
+        if form.is_valid():
+            user = form.cleaned_data['user']
+            
+            # Create password reset token
+            from .models import PasswordResetToken
+            from django.utils import timezone
+            
+            # Invalidate any existing tokens for this user
+            PasswordResetToken.objects.filter(user=user, is_used=False).update(is_used=True)
+            
+            # Create new token
+            token = PasswordResetToken.objects.create(
+                user=user,
+                expires_at=timezone.now() + timezone.timedelta(hours=1)
+            )
+            
+            messages.success(
+                request, 
+                f'Password reset link has been generated. Please use this link to reset your password: '
+                f'{request.build_absolute_uri(f"/accounts/password-reset/confirm/{token.token}/")}'
+            )
+            return redirect('password_reset_request')
+    else:
+        from .forms import PasswordResetRequestForm
+        form = PasswordResetRequestForm()
+    
+    return render(request, 'accounts/auth/password_reset_request.html', {'form': form})
+
+
+def password_reset_confirm(request, token):
+    """Second step: User enters new password using the token"""
+    from .models import PasswordResetToken
+    from .forms import PasswordResetConfirmForm
+    
+    try:
+        reset_token = PasswordResetToken.objects.get(token=token)
+        if not reset_token.is_valid():
+            messages.error(request, 'This password reset link has expired or has already been used.')
+            return redirect('password_reset_request')
+    except PasswordResetToken.DoesNotExist:
+        messages.error(request, 'Invalid password reset link.')
+        return redirect('password_reset_request')
+    
+    if request.method == 'POST':
+        form = PasswordResetConfirmForm(request.POST)
+        if form.is_valid():
+            # Update user password
+            user = reset_token.user
+            new_password = form.cleaned_data['new_password1']
+            user.set_password(new_password)
+            user.save()
+            
+            # Mark token as used
+            reset_token.is_used = True
+            reset_token.save()
+            
+            messages.success(request, 'Your password has been reset successfully. You can now log in with your new password.')
+            return redirect('login')
+    else:
+        form = PasswordResetConfirmForm()
+    
+    return render(request, 'accounts/auth/password_reset_confirm.html', {
+        'form': form,
+        'token': token,
+        'user': reset_token.user
+    })

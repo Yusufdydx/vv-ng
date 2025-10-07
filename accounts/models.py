@@ -4,6 +4,8 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
 from django.utils.crypto import get_random_string
+from django.utils import timezone
+import uuid
 
 
 class User(AbstractUser):
@@ -257,3 +259,30 @@ class UserBankPreference(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.bank.bank_name}"
+
+
+class PasswordResetToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_tokens')
+    token = models.UUIDField(default=uuid.uuid4, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    
+    class Meta:
+        verbose_name = 'Password Reset Token'
+        verbose_name_plural = 'Password Reset Tokens'
+    
+    def __str__(self):
+        return f"Password Reset Token for {self.user.username}"
+    
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            # Token expires in 1 hour
+            self.expires_at = timezone.now() + timezone.timedelta(hours=1)
+        super().save(*args, **kwargs)
+    
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+    
+    def is_valid(self):
+        return not self.is_used and not self.is_expired()

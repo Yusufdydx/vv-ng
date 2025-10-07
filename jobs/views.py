@@ -1,12 +1,15 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.shortcuts import render, get_object_or_404
-from django.urls import reverse_lazy
+from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse_lazy, reverse
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
-from .models import Job
+from django.contrib import messages
+from .models import Job, JobPurchase
 from site_core.models import Category   # instead of JobCategory
 from .forms import JobForm
+from transactions.utils import get_user_balance, can_afford_purchase, create_purchase_transaction, create_sale_transaction
 
 
 from django.contrib.admin.views.decorators import staff_member_required
@@ -130,17 +133,152 @@ class JobUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = Job
     form_class = JobForm
     template_name = 'jobs/edit.html'
-    success_url = reverse_lazy('jobs_list')
+    success_url = reverse_lazy('job_manage')
     
     def test_func(self):
         job = self.get_object()
         return job.posted_by == self.request.user
+    
+    def form_valid(self, form):
+        messages.success(self.request, '✅ Job updated successfully!')
+        return super().form_valid(form)
+    
+    def form_invalid(self, form):
+        messages.error(self.request, '❌ Please correct the errors below.')
+        return super().form_invalid(form)
 
 class JobDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
     model = Job
     template_name = 'jobs/delete.html'
-    success_url = reverse_lazy('jobs_list')
+    success_url = reverse_lazy('job_manage')
     
     def test_func(self):
         job = self.get_object()
         return job.posted_by == self.request.user
+    
+    def delete(self, request, *args, **kwargs):
+        messages.success(request, '✅ Job deleted successfully!')
+        return super().delete(request, *args, **kwargs)
+
+
+# Purchase Views
+def job_purchase_check(request, pk):
+    """Check if user can afford the job and redirect accordingly."""
+    job = get_object_or_404(Job, pk=pk, status='approved')
+    
+    if not request.user.is_authenticated:
+        messages.error(request, 'Please login to purchase this job.')
+        return redirect('login')
+    
+    # Check if user is the job poster
+    if job.posted_by == request.user:
+        messages.error(request, 'You cannot purchase your own job posting.')
+        return redirect('job_detail', pk=pk)
+    
+    # Check if already purchased
+    if JobPurchase.objects.filter(job=job, buyer=request.user).exists():
+        messages.info(request, 'You have already purchased this job.')
+        return redirect('job_detail', pk=pk)
+    
+    user_balance = get_user_balance(request.user)
+    
+    if can_afford_purchase(request.user, job.price):
+        return redirect('job_purchase_confirm', pk=pk)
+    else:
+        messages.warning(
+            request, 
+            f'Insufficient balance. You need ₦{job.price} but have ₦{user_balance}. Please add money to your account.'
+        )
+        return redirect('add_money')
+
+
+def job_purchase_confirm(request, pk):
+    """Show purchase confirmation page."""
+    job = get_object_or_404(Job, pk=pk, status='approved')
+    
+    if not request.user.is_authenticated:
+        return redirect('login')
+    
+    # Check if user is the job poster
+    if job.posted_by == request.user:
+        messages.error(request, 'You cannot purchase your own job posting.')
+        return redirect('job_detail', pk=pk)
+    
+    # Check if already purchased
+    if JobPurchase.objects.filter(job=job, buyer=request.user).exists():
+        messages.info(request, 'You have already purchased this job.')
+        return redirect('job_detail', pk=pk)
+    
+    user_balance = get_user_balance(request.user)
+    
+    if not can_afford_purchase(request.user, job.price):
+        messages.error(request, 'Insufficient balance.')
+        return redirect('add_money')
+    
+    if request.method == 'POST':
+        # Process the purchase
+        admin_fee = job.price * 0.05  # 5% admin fee
+        
+        # Create purchase record
+        purchase = JobPurchase.objects.create(
+            job=job,
+            buyer=request.user,
+            seller=job.posted_by,
+            purchase_price=job.price,
+            admin_fee=admin_fee,
+            status='completed'
+        )
+        
+        # Create transactions
+        create_purchase_transaction(
+            user=request.user,
+            amount=job.price,
+            description=f"Purchase of job: {job.title}",
+            reference=f"job_purchase_{purchase.id}"
+        )
+        
+        create_sale_transaction(
+            user=job.posted_by,
+            amount=job.price,
+            description=f"Sale of job: {job.title}",
+            reference=f"job_sale_{purchase.id}",
+            admin_fee=admin_fee
+        )
+        
+        messages.success(request, f'✅ Successfully purchased "{job.title}"!')
+        return redirect('job_purchases')
+    
+    context = {
+        'job': job,
+        'user_balance': user_balance,
+        'admin_fee': job.price * 0.05,
+        'net_amount': job.price - (job.price * 0.05)
+    }
+    
+    return render(request, 'jobs/purchase_confirm.html', context)
+
+
+@login_required
+def job_purchases(request):
+    """Show user's job purchases."""
+    purchases = JobPurchase.objects.filter(buyer=request.user).order_by('-purchased_at')
+    
+    context = {
+        'purchases': purchases,
+        'title': 'My Job Purchases'
+    }
+    
+    return render(request, 'jobs/purchases.html', context)
+
+
+@login_required
+def job_sales(request):
+    """Show user's job sales."""
+    sales = JobPurchase.objects.filter(seller=request.user).order_by('-purchased_at')
+    
+    context = {
+        'sales': sales,
+        'title': 'My Job Sales'
+    }
+    
+    return render(request, 'jobs/sales.html', context)

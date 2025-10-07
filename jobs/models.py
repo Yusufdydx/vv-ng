@@ -99,3 +99,37 @@ class Job(models.Model):
     def increment_views(self):
         self.views_count += 1
         self.save(update_fields=['views_count'])
+
+
+class JobPurchase(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('refunded', 'Refunded'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='purchases')
+    buyer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='job_purchases')
+    seller = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='job_sales')
+    purchase_price = models.DecimalField(max_digits=10, decimal_places=2)
+    commission_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    admin_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    net_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    purchased_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True, help_text="Additional notes or requirements")
+
+    class Meta:
+        ordering = ['-purchased_at']
+        unique_together = ['job', 'buyer']  # Prevent duplicate purchases
+
+    def __str__(self):
+        return f"{self.job.title} - {self.buyer.username}"
+
+    def save(self, *args, **kwargs):
+        if not self.seller_id:
+            self.seller = self.job.posted_by
+        if not self.net_amount:
+            self.net_amount = self.purchase_price - self.admin_fee - self.commission_amount
+        super().save(*args, **kwargs)

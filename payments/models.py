@@ -69,49 +69,42 @@ class Transaction(models.Model):
     
     @classmethod
     def get_user_balance(cls, user):
-        """Calculate user's available balance with debug info"""
-        print(f"\n🧮 DEBUG: Calculating balance for user: {user.username}")
-
-        completed_transactions = cls.objects.filter(user=user, status='completed')
-        print(f"✅ Completed transactions count: {completed_transactions.count()}")
-
-        credits = completed_transactions.filter(
-            transaction_type__in=['add_money', 'sale', 'commission']
-        ).aggregate(total=Sum('amount'))['total'] or 0
-        print(f"💰 Credits total: {credits}")
-
-        debits = completed_transactions.filter(
-            transaction_type__in=['withdraw', 'transfer', 'admin_fee']
-        ).aggregate(total=Sum('amount'))['total'] or 0
-        print(f"💸 Debits total: {debits}")
-
-        balance = credits - debits
-        print(f"📊 Final computed balance: {balance}\n")
-
-        # Also log it in case you have Django logging enabled
-        logger.info(f"User {user.username} balance calculated: {balance}")
-
-        return balance
-    
-    
-
-    @classmethod
-    def get_user_balance(cls, user):
         """Calculate user's available balance"""
         completed_transactions = cls.objects.filter(
             user=user,
-            status='completed'
+            status__in=['completed', 'approved']  # Include both completed and approved
         )
         
+        # Credits: money coming into user's account
         credits = completed_transactions.filter(
             transaction_type__in=['add_money', 'sale', 'commission']
         ).aggregate(total=models.Sum('amount'))['total'] or 0
         
-        debits = completed_transactions.filter(
-            transaction_type__in=['withdraw', 'transfer', 'admin_fee']
+        # Add transfer credits (money received from others)
+        transfer_credits = completed_transactions.filter(
+            transaction_type='transfer',
+            metadata__has_key='sender_id'  # This indicates money received
         ).aggregate(total=models.Sum('amount'))['total'] or 0
         
-        return credits - debits
+        credits += transfer_credits
+        
+        # Debits: money going out of user's account
+        debits = completed_transactions.filter(
+            transaction_type__in=['withdraw', 'admin_fee']
+        ).aggregate(total=models.Sum('amount'))['total'] or 0
+        
+        # Add transfer debits (money sent to others)
+        transfer_debits = completed_transactions.filter(
+            transaction_type='transfer',
+            metadata__has_key='recipient_id'  # This indicates money sent
+        ).aggregate(total=models.Sum('amount'))['total'] or 0
+        
+        debits += transfer_debits
+        
+        balance = credits - debits
+        logger.info(f"User {user.username} balance calculated: {balance} (Credits: {credits}, Debits: {debits})")
+        
+        return balance
 
     @classmethod
     def get_total_platform_balance(cls):
@@ -130,7 +123,7 @@ class Transaction(models.Model):
 
     def approve(self):
         if self.status == 'pending':
-            self.status = 'approved'
+            self.status = 'completed'  # Set to completed so it reflects in balance
             self.completed_at = timezone.now()
             self.save()
             return True

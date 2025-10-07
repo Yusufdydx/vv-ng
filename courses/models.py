@@ -110,3 +110,37 @@ class PromoCode(models.Model):
         return (self.is_active and 
                 self.used_count < self.max_uses and 
                 self.valid_until > timezone.now())
+
+
+class CoursePurchase(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('refunded', 'Refunded'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='purchases')
+    buyer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='course_purchases')
+    seller = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='course_sales')
+    purchase_price = models.DecimalField(max_digits=10, decimal_places=2)
+    commission_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    admin_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    net_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    purchased_at = models.DateTimeField(auto_now_add=True)
+    promo_code_used = models.ForeignKey(PromoCode, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ['-purchased_at']
+        unique_together = ['course', 'buyer']  # Prevent duplicate purchases
+
+    def __str__(self):
+        return f"{self.course.title} - {self.buyer.username}"
+
+    def save(self, *args, **kwargs):
+        if not self.seller_id:
+            self.seller = self.course.instructor
+        if not self.net_amount:
+            self.net_amount = self.purchase_price - self.admin_fee - self.commission_amount
+        super().save(*args, **kwargs)

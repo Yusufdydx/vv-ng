@@ -747,7 +747,7 @@
                         <a href="{% url 'notifications_list' %}" class="nav-link {% if 'notifications' in request.resolver_match.url_name %}active{% endif %}">
                             <i class="fas fa-bell"></i>
                             Notifications
-                            <span class="badge" id="notificationCount">0</span>
+                            <span class="badge" id="notificationCount">{{ unread_notifications_count }}</span>
                         </a>
                     </li>
                 </ul>
@@ -961,13 +961,7 @@
                 }, 5000);
             });
 
-            // Update notification count (example)
-            const notificationCount = document.getElementById('notificationCount');
-            if (notificationCount) {
-                // This would typically come from an API call
-                // For now, we'll set a random number for demo
-                notificationCount.textContent = Math.floor(Math.random() * 5);
-            }
+            // Notification count is now handled by context processor
         });
 
         // Handle window resize

@@ -136,8 +136,8 @@ def add_money(request):
         'site_settings': site_settings,
         'manual_form': manual_form,
         'manual_bank_details': {
-            'name': site_settings.manual_bank_name,
-            'number': site_settings.manual_account_number,
+            'bank_name': site_settings.manual_bank_name,
+            'account_number': site_settings.manual_account_number,
             'account_name': site_settings.manual_account_name,
         },
         'primary_virtual_account': primary_virtual_account,
@@ -154,33 +154,48 @@ def withdraw_money(request):
         form = WithdrawForm(request.POST)
         if form.is_valid():
             amount = form.cleaned_data['amount']
+            payment_method = form.cleaned_data['payment_method']
             current_balance = Transaction.get_user_balance(request.user)
             
-            if amount > current_balance:
-                messages.error(request, 'Insufficient balance for withdrawal.')
+            from affiliates.models import AffiliateSettings
+            affiliate_settings = AffiliateSettings.get_solo()
+            fee_rate = affiliate_settings.withdrawal_fee_rate / 100
+            fee = (amount * fee_rate) + affiliate_settings.withdrawal_fixed_fee
+            total_debit = amount + fee
+            
+            if total_debit > current_balance:
+                messages.error(request, f'Insufficient balance. You need ₦{total_debit} (including ₦{fee} fee) but have ₦{current_balance}.')
             else:
-                transaction = form.save(commit=False)
-                transaction.user = request.user
-                transaction.transaction_type = 'withdraw'
+                # Create withdrawal transaction
+                transaction = Transaction.objects.create(
+                    user=request.user,
+                    amount=total_debit,  # Total amount debited from user
+                    transaction_type='withdraw',
+                    payment_method=payment_method,
+                    status='pending',  # Requires admin approval
+                    description=f'Withdrawal request - ₦{amount} (Fee: ₦{fee})',
+                    metadata={
+                        'withdrawal_amount': float(amount),
+                        'admin_fee': float(fee),
+                        'net_amount': float(amount)  # Amount user will receive
+                    }
+                )
                 
-                site_settings = SiteSetting.get_solo()
-                if site_settings.withdraw_fee_pct > 0:
-                    fee = transaction.amount * (site_settings.withdraw_fee_pct / 100)
-                    transaction.metadata = {'admin_fee': float(fee)}
-                
-                transaction.save()
-                messages.success(request, 'Withdrawal request submitted successfully.')
+                messages.success(request, f'Withdrawal request of ₦{amount} submitted successfully. Total debit: ₦{total_debit} (including ₦{fee} fee). Your request will be processed within 24-48 hours.')
                 return redirect('transactions_list')
     else:
         form = WithdrawForm()
     
     current_balance = Transaction.get_user_balance(request.user)
     payment_methods = PaymentMethod.objects.filter(is_active=True)
+    from affiliates.models import AffiliateSettings
+    affiliate_settings = AffiliateSettings.get_solo()
     
     context = {
         'form': form,
         'current_balance': current_balance,
         'payment_methods': payment_methods,
+        'affiliate_settings': affiliate_settings,
     }
     return render(request, 'payments/withdraw.html', context)
 
@@ -194,64 +209,70 @@ def transfer_money(request):
             description = form.cleaned_data.get('description', '')
             
             current_balance = Transaction.get_user_balance(request.user)
+            from affiliates.models import AffiliateSettings
+            affiliate_settings = AffiliateSettings.get_solo()
+            fee = amount * (affiliate_settings.transfer_fee_rate / 100)
+            total_debit = amount + fee
             
-            if amount > current_balance:
-                messages.error(request, 'Insufficient balance for transfer.')
+            if total_debit > current_balance:
+                messages.error(request, f'Insufficient balance. You need ₦{total_debit} (including ₦{fee} fee) but have ₦{current_balance}.')
             else:
                 with db_transaction.atomic():
-                    site_settings = SiteSetting.get_solo()
-                    fee = amount * (site_settings.transfer_fee_pct / 100)
-                    net_amount = amount - fee
-                    
-                    # Create debit transaction for sender
+                    # Create debit transaction for sender (total amount including fee)
                     debit_txn = Transaction.objects.create(
                         user=request.user,
-                        amount=amount,
+                        amount=total_debit,
                         transaction_type='transfer',
                         status='completed',
                         description=f"Transfer to {recipient.username}: {description}",
                         metadata={
                             'recipient_id': recipient.id,
+                            'transfer_amount': float(amount),
                             'admin_fee': float(fee),
-                            'net_amount': float(net_amount)
+                            'recipient_receives': float(amount)
                         }
                     )
                     
-                    # Create credit transaction for recipient
+                    # Create credit transaction for recipient (they receive the full amount)
                     credit_txn = Transaction.objects.create(
                         user=recipient,
-                        amount=net_amount,
+                        amount=amount,
                         transaction_type='transfer',
                         status='completed',
                         description=f"Transfer from {request.user.username}: {description}",
                         metadata={
                             'sender_id': request.user.id,
                             'original_amount': float(amount),
-                            'admin_fee': float(fee)
+                            'sender_fee': float(fee)
                         }
                     )
                     
-                    # Create admin fee transaction
+                    # Create admin fee transaction if fee > 0
                     if fee > 0:
                         Transaction.objects.create(
-                            user=request.user,  # Or system user
+                            user=request.user,
                             amount=fee,
                             transaction_type='admin_fee',
                             status='completed',
                             description=f"Transfer fee for transaction {debit_txn.reference}",
                             metadata={
-                                'original_transaction_id': debit_txn.id
+                                'original_transaction_id': debit_txn.id,
+                                'fee_type': 'transfer_fee'
                             }
                         )
                 
-                messages.success(request, f'Transfer of {amount} to {recipient.username} completed successfully.')
+                messages.success(request, f'Transfer of ₦{amount} to {recipient.username} completed successfully. Total debit: ₦{total_debit} (including ₦{fee} fee).')
                 return redirect('transactions_list')
     else:
         form = TransferForm()
     
     current_balance = Transaction.get_user_balance(request.user)
+    from affiliates.models import AffiliateSettings
+    affiliate_settings = AffiliateSettings.get_solo()
+    
     context = {
         'form': form,
         'current_balance': current_balance,
+        'affiliate_settings': affiliate_settings,
     }
     return render(request, 'payments/transfer.html', context)

@@ -333,61 +333,6 @@ class VirtualAccountAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False  # Virtual accounts should only be created via KYC approval
 
-@admin.register(ManualDeposit)
-class ManualDepositAdmin(admin.ModelAdmin):
-    list_display = ('user', 'amount', 'depositor_name', 'status_badge', 'created_at', 'reviewed_at')
-    list_filter = ('status', 'created_at')
-    search_fields = ('user__username', 'depositor_name')
-    readonly_fields = ('created_at',)
-    actions = ['approve_deposits', 'reject_deposits']
-    
-    def status_badge(self, obj):
-        colors = {
-            'pending': 'orange',
-            'approved': 'green', 
-            'rejected': 'red'
-        }
-        return format_html(
-            '<span style="padding: 4px 8px; border-radius: 12px; color: white; background-color: {}; font-size: 12px; font-weight: bold;">{}</span>',
-            colors.get(obj.status, 'gray'),
-            obj.get_status_display().upper()
-        )
-    status_badge.short_description = 'Status'
-
-    def approve_deposits(self, request, queryset):
-        for deposit in queryset.filter(status='pending'):
-            try:
-                from payments.models import Transaction
-                transaction = Transaction.objects.create(
-                    user=deposit.user,
-                    transaction_type='add_money',
-                    amount=deposit.amount,
-                    currency='NGN',
-                    status='completed',
-                    reference=f"MANUAL_{deposit.id}",
-                    description=f"Manual deposit approved - {deposit.depositor_name}",
-                    completed_at=timezone.now()
-                )
-                
-                deposit.status = 'approved'
-                deposit.reviewed_at = timezone.now()
-                deposit.reviewed_by = request.user
-                deposit.save()
-                
-                self.message_user(request, f"✅ Deposit of ₦{deposit.amount} approved for {deposit.user.username}", messages.SUCCESS)
-            except Exception as e:
-                self.message_user(request, f"❌ Error approving deposit for {deposit.user.username}: {str(e)}", messages.ERROR)
-    
-    approve_deposits.short_description = "✅ Approve selected deposits and credit users"
-
-    def reject_deposits(self, request, queryset):
-        for deposit in queryset.filter(status='pending'):
-            deposit.status = 'rejected'
-            deposit.reviewed_at = timezone.now()
-            deposit.reviewed_by = request.user
-            deposit.save()
-            self.message_user(request, f"✅ Deposit from {deposit.depositor_name} rejected", messages.SUCCESS)
-    
-    reject_deposits.short_description = "❌ Reject selected deposits"
+# ManualDeposit admin is registered in payments/admin.py
 
 # ... rest of your existing admin registrations ...

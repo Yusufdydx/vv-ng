@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Referral, AffiliateSale
+from solo.admin import SingletonModelAdmin
+from .models import Referral, AffiliateSale, AffiliateSettings
 
 @admin.register(Referral)
 class ReferralAdmin(admin.ModelAdmin):
@@ -26,3 +27,24 @@ class AffiliateSaleAdmin(admin.ModelAdmin):
             sale.mark_as_paid()
         self.message_user(request, f'{queryset.count()} commissions marked as paid.')
     mark_as_paid.short_description = "Mark selected commissions as paid"
+
+
+@admin.register(AffiliateSettings)
+class AffiliateSettingsAdmin(SingletonModelAdmin):
+    fieldsets = (
+        ('Referral Rewards', {
+            'fields': ('referral_signup_reward', 'referral_commission_rate')
+        }),
+        ('Platform Fees', {
+            'fields': ('job_posting_fee_rate', 'course_sale_fee_rate', 'product_sale_fee_rate', 'mentorship_fee_rate')
+        }),
+        ('Transaction Fees', {
+            'fields': ('withdrawal_fee_rate', 'withdrawal_fixed_fee', 'transfer_fee_rate')
+        }),
+        ('Thresholds', {
+            'fields': ('min_withdrawal_amount', 'min_commission_payout')
+        }),
+        ('Settings', {
+            'fields': ('auto_approve_commissions', 'commission_payout_delay_days')
+        }),
+    )

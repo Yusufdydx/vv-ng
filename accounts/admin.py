@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, UserProfile, BankAccount, CryptoWallet
+from .models import User, UserProfile, BankAccount, CryptoWallet, PasswordResetToken
 
 
 class UserProfileInline(admin.StackedInline):
@@ -39,3 +39,16 @@ class CryptoWalletAdmin(admin.ModelAdmin):
 
 
 admin.site.register(User, CustomUserAdmin)
+
+
+@admin.register(PasswordResetToken)
+class PasswordResetTokenAdmin(admin.ModelAdmin):
+    list_display = ('user', 'token', 'created_at', 'expires_at', 'is_used', 'is_valid')
+    list_filter = ('is_used', 'created_at', 'expires_at')
+    search_fields = ('user__username', 'user__email', 'token')
+    readonly_fields = ('token', 'created_at', 'expires_at')
+    
+    def is_valid(self, obj):
+        return obj.is_valid()
+    is_valid.boolean = True
+    is_valid.short_description = 'Valid'
